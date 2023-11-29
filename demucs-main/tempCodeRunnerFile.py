@@ -1,0 +1,1 @@
+demucs.separate.main(["--mp3", "--two-stems", "vocals", "-n", "mdx_extra", "C:/Users/Usuario/Downloads/demucs-main/demucs-main/pointandkill.mp3"])
