@@ -18,12 +18,15 @@ from django.contrib.auth.hashers import make_password, check_password
 import cloudinary.uploader
 import demucs.separate
 
-from AppTracKids.models import Usuario, Project
+from AppTracKids.models import Songs, Usuario, Project
 
 # Token
 def validarToken(request):
     authorization_header = request.headers.get('Authorization')
     if authorization_header:
+        print("--------------------")
+        print(authorization_header)
+        print("--------------------")
         token = authorization_header.split(' ')[1]
     else:
         return None  # Retorna None si no hay token en el header
@@ -119,13 +122,143 @@ def getProyectos(request):
     return JsonResponse(proyectosResponse, status=200, safe=False)
 
 # Metodos de Separacion de Pistas | Proyectos
+@csrf_exempt
+@api_view(['GET'])
+def getAllProyectos(request):
+    #Buscar Usuario
+    proyectos = Project.objects.all()
+    proyectosResponse = []
+    for proyecto in proyectos:
+        proyectoData = {
+            'id': proyecto.id,
+            'tittle': proyecto.titulo,
+            'imagen': proyecto.imagen,
+            'vocals': proyecto.vocals,
+            'other': proyecto.other,
+            'drums': proyecto.drums,
+            'bass': proyecto.bass
+        }
+        proyectosResponse.append(proyectoData)
+    return JsonResponse(proyectosResponse, status=200, safe=False)
+
+@csrf_exempt
+@api_view(['GET'])
+def getAllSongs(request):
+    #Buscar Usuario
+    canciones = Songs.objects.all()
+    cancionesResponse = []
+    for cancion in canciones:
+        cancionData = {
+            'id': cancion.id,
+            'tittle': cancion.titulo,
+            'info':cancion.info,
+            'artist': cancion.artista,
+            'cover': cancion.imagen,
+            'vocals': cancion.vocals,
+            'other': cancion.other,
+            'drums': cancion.drums,
+            'bass': cancion.bass,
+            'track':cancion.track
+        }
+        cancionesResponse.append(cancionData)
+    return JsonResponse(cancionesResponse, status=200, safe=False)
+
+@csrf_exempt
+@api_view(['GET'])
+def getOneSong(request):
+    # Obtener la primera canción
+    cancion = Songs.objects.last()
+
+    # Verificar si se encontró una canción
+    if cancion:
+        cancionData = {
+            'id': cancion.id,
+            'tittle': cancion.titulo,
+            'info': cancion.info,
+            'artist': cancion.artista,
+            'cover': cancion.imagen,
+            'vocals': cancion.vocals,
+            'other': cancion.other,
+            'drums': cancion.drums,
+            'bass': cancion.bass,
+            'track':cancion.track
+        }
+        return JsonResponse(cancionData, status=200)
+    else:
+        return JsonResponse({'message': 'No se encontraron canciones'})
+
+@csrf_exempt
+@api_view(['POST'])
+def proyectoToSong(request):
+    id = request.data.get('id')
+    info = request.data.get('info')
+    artist = request.data.get('artista')
+    
+    proyecto = Project.objects.get(id=id)
+    if proyecto == None:
+        return JsonResponse({'error': 'Proyecto no Encontrado'}, status=404)
+    
+    
+    cancion = Songs(
+        info = info,
+        artista = artist,
+        titulo=proyecto.titulo,
+        imagen=proyecto.imagen,
+        vocals=proyecto.vocals,
+        other=proyecto.other,
+        drums=proyecto.drums,
+        bass=proyecto.bass
+        )   
+    cancion.save()
+    
+    
+    return JsonResponse({"message":"Guardado"}, status=201)
+
+@csrf_exempt
+@api_view(['POST'])
+def cancionSemanaYoutube(request):
+       
+    #Datos Solicitados
+    link = request.data.get('link')
+    info = request.data.get('info')
+    artist = request.data.get('artista') 
+    #Cargar Video
+    video = YouTube(link)
+    nombre = video.title
+    directorio = os.getcwd()+f"/{nombre}/demucs/"
+    mp3_file = f"{nombre}.mp3"
+    # Descargar solo el audio
+    audio_stream = video.streams.filter(only_audio=True).first()
+    audio_stream.download(output_path=directorio, filename=mp3_file)
+    
+    Salida = separarPistas(nombre)
+    if Salida == False:
+        return JsonResponse({"error": "Fallo en la separacion"}, status=500)
+    urls = cargarPistasCloudinary(nombre)
+    urlTrack = cargarCancionCompleta(nombre)
+    borrarResultados(nombre)
+    cancion = Songs(
+        info = info,
+        artista = artist,
+        titulo=nombre,
+        imagen=video.thumbnail_url,
+        track = urlTrack,
+        vocals=urls["vocals"],
+        other=urls["other"],
+        drums=urls["drums"],
+        bass=urls["bass"]
+        )   
+    cancion.save()
+    
+    return JsonResponse({"message":"Guardado"}, status=201)
+
+
 def validarProyecto(id):
     try:
         proyectoActual = Project.objects.get(id=id)
         return proyectoActual
     except Project.DoesNotExist:
         return None
-
 
 @csrf_exempt
 @api_view(['POST'])
@@ -384,26 +517,20 @@ def cargarPistasCloudinary(nombre):
     }
     return urls
 
-
-
-
-
-
-
-
-    link = request.data.get('link')
-    video = YouTube(link)
-    nombre = video.title
-    directorio = os.getcwd()+"/demucs/"
-
-    mp3_file = f"{nombre}.mp3"
-    mp3_path = os.path.join(directorio, mp3_file)
-
-    # Descargar solo el audio
-    audio_stream = video.streams.filter(only_audio=True).first()
-    audio_stream.download(output_path=directorio, filename=mp3_file)
+def cargarCancionCompleta(nombre):
+    def obtenerUrl(mp3_path):
+        CLOUDINARY = {
+            'cloud_name': 'dewiieivf',
+            'api_key': '369268768791138',
+            'api_secret': '6HucCaibPEhkVm-W3JREtd0eNSo',
+        }
+        
+        cloudinary_response = cloudinary.uploader.upload(mp3_path, resource_type='raw')
+        cloudinary_url = cloudinary_response.get('secure_url')
+        #print(cloudinary_url)
+        return cloudinary_url
     
-    toDemuc(directorio)
-    
-    os.remove(mp3_path)
+    carpeta = os.getcwd()+f"/{nombre}/demucs/"
+    url = obtenerUrl(carpeta + f"{nombre}.mp3")
+    return url
     

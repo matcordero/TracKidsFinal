@@ -21,3 +21,15 @@ class Project(models.Model):
     drums = models.TextField(default="")
     bass = models.TextField(default="")
     
+    
+class Songs(models.Model):
+    id = models.AutoField(primary_key=True)
+    titulo = models.TextField(default="")
+    artista = models.TextField(default="")
+    info = models.TextField(default="")
+    imagen = models.TextField(default="")
+    vocals = models.TextField(default="")
+    other = models.TextField(default="")
+    drums = models.TextField(default="")
+    bass = models.TextField(default="")
+    track = models.TextField(default="")
